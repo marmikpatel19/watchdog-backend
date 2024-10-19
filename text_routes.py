@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 from etext import send_mms_via_email
 import os
 from dotenv import load_dotenv
+import requests
+import tempfile
 
 load_dotenv()
 
@@ -32,7 +34,15 @@ def send_mms():
         os.getenv("SMTPLIB_SENDER_CREDENTIALS")
     )
 
+    # Download the image to a temporary file
     try:
+        response = requests.get(image_url, stream=True)
+        response.raise_for_status()
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
+            temp_file.write(response.content)
+            file_path = temp_file.name
+
         send_mms_via_email(
             phone_number,
             message,
@@ -42,9 +52,16 @@ def send_mms():
             provider,
             sender_credentials
         )
+
         return jsonify({"status": "success", "message": "MMS sent successfully!"}), 200
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+    finally:
+        # Delete the temporary file
+        if 'file_path' in locals() and os.path.exists(file_path):
+            os.remove(file_path)
 
 if __name__ == "__main__":
     app.run(debug=True)
