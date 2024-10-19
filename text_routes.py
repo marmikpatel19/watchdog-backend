@@ -27,7 +27,7 @@ def send_mms():
     )
     mime_maintype = "image"
     mime_subtype = "png"
-    provider = "AT&T"
+    provider = "T-Mobile"
 
     sender_credentials = (
         os.getenv("SMTPLIB_SENDER_EMAIL"),
