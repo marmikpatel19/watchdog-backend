@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import { FaTrashAlt, FaPlay, FaStop, FaPause } from "react-icons/fa";
 import * as moment from "moment";
-import "./garbagePickupDemoStyle.css";
+import "./WeaponObjectDetectionVideo.css";
 
 //roboflow cred
 const PUBLISHABLE_ROBOFLOW_API_KEY = process.env.REACT_APP_ROBOFLOW_PUBLISHABLE_API_KEY;
