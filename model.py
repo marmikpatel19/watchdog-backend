@@ -7,8 +7,8 @@ load_dotenv()
 
 # Initialize the Roboflow client
 CLIENT = InferenceHTTPClient(
-    api_url=os.getenv("ROBOFLOW_API_URL"),
-    api_key=os.getenv("ROBOFLOW_API_KEY")
+    api_url="https://detect.roboflow.com",
+    api_key="ZOkAHlhDbVaowBx6bhkq"
 )
 
 def process_video(input_path, output_path):
@@ -72,8 +72,8 @@ def process_video(input_path, output_path):
     print("Video processing complete")
 
 # Use raw string for file path
-input_path = r"...\watchdog-backend\testing-videos\small-gun.mp4" # fill it out
-output_path = "testing-videos\output_gun_detection.mp4" # fill it out
+input_path = r"/Users/aahilali/Desktop/watchdog-backend/testing-videos/Disturbing_new_footage_shows_Salvador_Ramos_in_Uvalde_school_cops_running___New_York_Post.mp4"
+output_path = r"/Users/aahilali/Desktop/watchdog-backend/testing-videos-output/uvalde.mp4"
 
 # Check if input file exists
 if not os.path.exists(input_path):

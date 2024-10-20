@@ -1,44 +1,36 @@
-import { useRef, useEffect, useState } from "react";
-import { FaTrashAlt, FaPlay, FaStop, FaPause } from "react-icons/fa";
-import * as moment from "moment";
+import React, { useRef, useEffect, useState } from "react";
+import { FaStop } from "react-icons/fa";
+import moment from "moment";
+import axios from 'axios';
 import "./WeaponObjectDetectionVideo.css";
 
-//roboflow cred
-const PUBLISHABLE_ROBOFLOW_API_KEY = process.env.REACT_APP_ROBOFLOW_PUBLISHABLE_API_KEY;
+const PUBLISHABLE_ROBOFLOW_API_KEY = "rf_q03fPvZXzYZJzVrJEFbMaSPt1yY2";
 const PROJECT_URL = "weapon-detection-3esci";
-const MODEL_VERSION = "1"; 
+const MODEL_VERSION = "1";
 
 const WeaponObjectDetectionVideo = (props) => {
   const [modelStatus, setModelStatus] = useState("model not loaded");
   const [modelStatusCss, setModelStatusCss] = useState("removed");
-
-  const [enableCamText, setEnableCamText] = useState(
-    "Enable camera to start detection",
-  );
+  const [enableCamText, setEnableCamText] = useState("Enable camera to start detection");
   const [disableCamButton, setDisableCamButton] = useState(false);
   const [disableStopButton, setDisableStopButton] = useState(true);
+  const [currentCoordinates, setCurrentCoordinates] = useState({ latitude: null, longitude: null });
 
   const canvasRef = useRef(null);
   const streamSourceRef = useRef(null);
-  var videoWidth = 460;
-  var videoHeight = 460;
+  const videoWidth = 460;
+  const videoHeight = 460;
 
-  var model = undefined;
-  var detectInterval = useRef(null);
-
-  const emptyTolerance = 30;
-  var emptyingTrash = false;
+  let model = undefined;
+  const detectInterval = useRef(null);
 
   useEffect(() => {
     loadModel();
-  }, []);
-
-  useEffect(() => {
     loadingAnimations();
+    startSendingCoordinates();
   }, []);
 
- //show loading animations at startup
- const loadingAnimations = () => {
+  const loadingAnimations = () => {
     setDisableCamButton(true);
     setModelStatusCss("model-status-loading");
     setModelStatus("Object Detection Loading");
@@ -49,7 +41,7 @@ const WeaponObjectDetectionVideo = (props) => {
   };
 
   const showWebCam = async () => {
-    setDisableCamButton(true); // disable button wait for cam permission first
+    setDisableCamButton(true);
 
     const camPermissions = await enableCam(true);
     if (camPermissions) {
@@ -67,10 +59,9 @@ const WeaponObjectDetectionVideo = (props) => {
   };
 
   const restartCamDetection = () => {
-    emptyingTrash = false;
+    // Add any restart logic here if needed
   };
 
-  //load the model
   const loadModel = async () => {
     await window.roboflow
       .auth({
@@ -86,7 +77,6 @@ const WeaponObjectDetectionVideo = (props) => {
       });
   };
 
-  //Start detecting
   const startDetection = () => {
     if (model) {
       detectInterval.current = setInterval(() => {
@@ -95,141 +85,120 @@ const WeaponObjectDetectionVideo = (props) => {
     }
   };
 
-   //Stop detection
-   const stopDetection = async () => {
+  const stopDetection = async () => {
     clearInterval(detectInterval.current);
-
-    //clear canvas when stop detecting
     setTimeout(() => {
       clearCanvas();
     }, 500);
   };
 
-
   const clearCanvas = () => {
-    canvasRef.current.getContext("2d").clearRect(0, 0, 360, 360);
+    canvasRef.current.getContext("2d").clearRect(0, 0, videoWidth, videoHeight);
   };
 
-//Enable live webcam
-const enableCam = (checkCamPermission = false) => {
-  const constraints = {
-    video: {
-      width: videoWidth, //416
-      height: videoHeight, //416
-      facingMode: "environment",
-    },
-  };
+  const enableCam = (checkCamPermission = false) => {
+    const constraints = {
+      video: {
+        width: videoWidth,
+        height: videoHeight,
+        facingMode: "environment",
+      },
+    };
 
-  return navigator.mediaDevices.getUserMedia(constraints).then(
-    function (stream) {
-      if (checkCamPermission) {
-        stream.getVideoTracks().forEach((track) => {
-          track.stop();
-        });
-        return true;
-      } else {
-        streamSourceRef.current.srcObject = stream;
-        streamSourceRef.current.addEventListener("loadeddata", function () {
+    return navigator.mediaDevices.getUserMedia(constraints).then(
+      function (stream) {
+        if (checkCamPermission) {
+          stream.getVideoTracks().forEach((track) => {
+            track.stop();
+          });
           return true;
-        });
+        } else {
+          streamSourceRef.current.srcObject = stream;
+          streamSourceRef.current.addEventListener("loadeddata", function () {
+            return true;
+          });
+        }
+      },
+      (error) => {
+        setDisableCamButton(true);
+        setDisableStopButton(true);
+        checkCamPermission && alert("You have to allow camera permissions");
+        setEnableCamText("Allow your camera permissions and reload");
+        return false;
+      },
+    );
+  };
+
+  const stopCamera = () => {
+    if (streamSourceRef.current != null && streamSourceRef.current.srcObject !== null) {
+      streamSourceRef.current.srcObject.getVideoTracks().forEach((track) => {
+        track.stop();
+      });
+    }
+    stopDetection();
+    setEnableCamText("Restart Camera and Detection");
+    setDisableCamButton(false);
+    setDisableStopButton(true);
+  };
+
+  const startSendingCoordinates = () => {
+    setInterval(() => {
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            setCurrentCoordinates({ latitude, longitude });
+            sendCoordinatesToServer(latitude, longitude);
+          },
+          (error) => {
+            console.error("Error getting geolocation:", error);
+            sendCoordinatesToServer(null, null);
+          }
+        );
+      } else {
+        console.error("Geolocation is not supported by this browser.");
+        sendCoordinatesToServer(null, null);
       }
-    },
-    (error) => {
-      setDisableCamButton(true);
-      setDisableStopButton(true);
-      checkCamPermission && alert("You have to allow camera permissions");
-      setEnableCamText("Allow your camera permissions and reload");
-      return false;
-    },
-  );
-};
+    }, 2000);
+  };
 
+  const sendCoordinatesToServer = async (latitude, longitude) => {
+    try {
+      await axios.post('http://localhost:5000/update_coordinates', { latitude, longitude });
+    } catch (error) {
+      console.error('Error sending coordinates:', error);
+    }
+  };
 
+  const notifyWeaponDetection = async () => {
+    try {
+      const response = await axios.post('http://localhost:5000/weapon_detected', {
+        coordinates: currentCoordinates
+      });
+      console.log('Weapon detection notification sent:', response.data);
+    } catch (error) {
+      console.error('Error notifying weapon detection:', error);
+    }
+  };
 
-
-const stopCamera = (options) => {
-  if (
-    streamSourceRef.current != null &&
-    streamSourceRef.current.srcObject !== null
-  ) {
-    streamSourceRef.current.srcObject.getVideoTracks().forEach((track) => {
-      track.stop();
-    });
-  }
-  stopDetection();
-  setEnableCamText("Restart Camera and Detection");
-  setDisableCamButton(false);
-  setDisableStopButton(true);
-};
-
-const restartDetection = (intervalTimer) => {
-  clearInterval(detectInterval.current);
-  detectInterval.current = undefined;
-  if (model) {
-    detectInterval.current = setInterval(() => {
-      detect(model);
-    }, intervalTimer);
-  }
-};
-
-let trashToleranceTicker = 0;
-let trashToleranceTimer = undefined;
-const emptyTrashTolerance = (start) => {
-  if (!start) {
-    clearInterval(trashToleranceTimer);
-  } else {
-    trashToleranceTimer = setInterval(() => {
-      trashToleranceTicker++;
-    }, 1000);
-  }
-  return trashToleranceTicker;
-};
-
-  //Detection stuff
   const detect = async (model) => {
-    console.log("detect");
-    if (
-      typeof streamSourceRef.current !== "undefined" &&
-      streamSourceRef.current !== null
-    ) {
+    if (typeof streamSourceRef.current !== "undefined" && streamSourceRef.current !== null) {
       adjustCanvas(videoWidth, videoHeight);
 
       const detections = await model.detect(streamSourceRef.current);
 
-      let truckPresent = false;
+      let weaponDetected = false;
 
       if (detections.length > 0) {
         detections.forEach((el) => {
-          if (el.class === "garbageTruck" && el.confidence > 0.6) {
-            truckPresent = true;
-          }
-
-          if (
-            truckPresent &&
-            el.class === "garbagePickingUp" &&
-            el.confidence > 0.6
-          ) {
-            emptyingTrash = true;
-            emptyTrashTolerance(true);
+          if (el.class === "weapon" && el.confidence > 0.6) {
+            weaponDetected = true;
           }
         });
       }
 
-      if (truckPresent) {
-        restartDetection(10);
-      } else {
-        restartDetection(1000);
-      }
-
-      if (
-        emptyingTrash &&
-        !truckPresent &&
-        trashToleranceTicker > emptyTolerance
-      ) {
-        emptyingTrash = false;
-        emptyTrashTolerance(false);
-        stopCamera("fromDetect");
-        pickupTimes.push(moment().format("ddd, MM-DD-YYYY, h:mm a"));
+      if (weaponDetected) {
+        notifyWeaponDetection();
       }
 
       const ctx = canvasRef.current.getContext("2d");
@@ -252,40 +221,30 @@ const emptyTrashTolerance = (start) => {
   const drawBoxes = (detections, ctx) => {
     detections.forEach((row) => {
       if (true) {
-        //video
         var temp = row.bbox;
-        temp.class =
-          row.class === "GarbageBin"
-            ? "bin"
-            : row.class === "garbagePickingUp"
-            ? "pickup"
-            : row.class;
+        temp.class = row.class;
         temp.color = row.color;
         temp.confidence = row.confidence;
         row = temp;
       }
       if (row.confidence < 0) return;
 
-      //dimensions
       var x = row.x - row.width / 2;
       var y = row.y - row.height / 2;
       var w = row.width;
       var h = row.height;
 
-      //box
       ctx.beginPath();
       ctx.lineWidth = 1;
       ctx.strokeStyle = row.color;
       ctx.rect(x, y, w, h);
       ctx.stroke();
 
-      //shade
       ctx.fillStyle = "black";
       ctx.globalAlpha = 0.2;
       ctx.fillRect(x, y, w, h);
       ctx.globalAlpha = 1.0;
 
-      //label
       var fontColor = "black";
       var fontSize = 12;
       ctx.font = `${fontSize}px monospace`;
@@ -327,7 +286,6 @@ const emptyTrashTolerance = (start) => {
     });
   };
 
-
   return (
     <div className="outer-container">
       <div className="app-container">
@@ -336,16 +294,12 @@ const emptyTrashTolerance = (start) => {
         </p>
 
         <div className="container">
-          <div className="top-container"> 
+          <div className="top-container">
             <div className="top-button-container">
               <button
                 onClick={showWebCam}
                 disabled={disableCamButton}
-                className={
-                  disableCamButton
-                    ? " cam-button disable-cam-button"
-                    : "cam-button"
-                }
+                className={disableCamButton ? "cam-button disable-cam-button" : "cam-button"}
               >
                 {enableCamText}
               </button>
@@ -359,11 +313,7 @@ const emptyTrashTolerance = (start) => {
           <div className="video-display-container">
             <div className="video-display-buttons">
               <button
-                className={
-                  disableStopButton
-                    ? "stop-webcam-button disable-cam-button"
-                    : "stop-webcam-button"
-                }
+                className={disableStopButton ? "stop-webcam-button disable-cam-button" : "stop-webcam-button"}
                 onClick={stopCamera}
                 disabled={disableStopButton}
               >
